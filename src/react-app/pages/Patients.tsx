@@ -49,7 +49,8 @@ export default function Patients() {
   const [patients, setPatients] = useState<PatientType[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentUserPatientId, setCurrentUserPatientId] = useState<number | null>(null);
-  
+  const [isOpen, setIsOpen] = useState<boolean>(false);
+
   // Form state
   const [formData, setFormData] = useState({
     name: '',
