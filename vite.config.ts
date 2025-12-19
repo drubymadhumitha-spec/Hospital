@@ -1,25 +1,28 @@
-import path from "path";
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import { mochaPlugins } from "@getmocha/vite-plugins";
+// vite.config.ts
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import path from 'path';
+import fs from 'fs-extra';
 
-// Vite config for Netlify (no Cloudflare worker)
 export default defineConfig({
-  plugins: [
-    // Mocha plugins for testing
-    ...mochaPlugins(process.env as any),
-    // React support
-    react()
-  ],
-  server: {
-    allowedHosts: true,
-  },
+  plugins: [react()],
   build: {
-    chunkSizeWarningLimit: 5000,
+    outDir: 'dist',
+    rollupOptions: {
+      // After build, copy _redirects
+      plugins: [
+        {
+          name: 'copy-redirects',
+          writeBundle() {
+            fs.copySync('public/_redirects', 'dist/_redirects');
+          },
+        },
+      ],
+    },
   },
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
+      '@': path.resolve(__dirname, './src'),
     },
   },
 });
