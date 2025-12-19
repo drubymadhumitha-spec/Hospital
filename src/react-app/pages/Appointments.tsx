@@ -1,15 +1,15 @@
 import { useState, useEffect } from 'react';
 import { 
-  Plus, Trash2, CheckCircle, XCircle, Clock, AlertTriangle, Calendar, 
-  User, Stethoscope, CalendarDays, FileText, Bell, Activity, TrendingUp, 
-  CalendarCheck, CalendarX, CalendarClock, Search, Eye, Edit
+ Trash2, CheckCircle, XCircle, Clock, AlertTriangle, Calendar, 
+  User, Stethoscope, CalendarDays, FileText, Activity, 
+  CalendarCheck, CalendarX, CalendarClock, Search, Eye
 } from 'lucide-react';
 import { useApi, apiPost, apiPut, apiDelete } from '@/react-app/hooks/useApi';
 import { AppointmentWithDetails, Doctor, Patient } from '@/shared/types';
 import Modal from '@/react-app/components/Modal';
 import Button from '@/react-app/components/Button';
 import Input from '@/react-app/components/Input';
-import { useAuth } from '@/react-app/App'; // Import useAuth hook
+import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase'; // Import supabase client
 
 export default function Appointments() {
@@ -488,7 +488,8 @@ export default function Appointments() {
                         </div>
                       </td>
                       <td className="py-4 px-6">
-                        {getStatusBadge(appointment.status, appointment.is_emergency)}
+                        {getStatusBadge(appointment.status, Boolean(appointment.is_emergency)
+)}
                       </td>
                       <td className="py-4 px-6">
                         <div className="flex gap-2">

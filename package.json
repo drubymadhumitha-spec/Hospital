@@ -5,7 +5,9 @@
   "type": "module",
   "dependencies": {
     "@hono/zod-validator": "^0.7.5",
+    "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.87.1",
+    "framer-motion": "^12.23.26",
     "hono": "4.7.7",
     "lucide-react": "^0.510.0",
     "react": "19.0.0",

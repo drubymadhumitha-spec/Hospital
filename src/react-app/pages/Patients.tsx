@@ -2,11 +2,11 @@ import { useState, useEffect } from 'react';
 import { 
   Plus, Edit, Trash2, History, User, Phone, Mail, Calendar, 
   MapPin, Droplets, Activity, Heart, Stethoscope, Users, 
-  UserCheck, UserPlus, Search, Filter, Download, Eye
+  UserCheck, UserPlus, Search, Download, Eye
 } from 'lucide-react';
 import { useNavigate } from 'react-router';
-import { supabase, apiPost, apiPut, apiDelete, useApi } from '@/react-app/hooks/useApi';
-import { useAuth } from '@/react-app/App';
+import { supabase, apiPost, apiPut, apiDelete } from '@/react-app/hooks/useApi';
+import { useAuth } from '../context/AuthContext';
 import Modal from '@/react-app/components/Modal';
 import Button from '@/react-app/components/Button';
 import Input from '@/react-app/components/Input';
@@ -49,7 +49,6 @@ export default function Patients() {
   const [patients, setPatients] = useState<PatientType[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentUserPatientId, setCurrentUserPatientId] = useState<number | null>(null);
-  const [isOpen, setIsOpen] = useState<boolean>(false);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -116,7 +115,7 @@ export default function Patients() {
         if (filterStatus === 'critical') {
           query = query.or('has_diabetes.eq.true,has_hypertension.eq.true,has_sugar_issues.eq.true');
         } else if (filterStatus === 'healthy') {
-          query = query.and('has_diabetes.eq.false,has_hypertension.eq.false,has_sugar_issues.eq.false');
+          query = query.eq('has_diabetes', false).eq('has_hypertension', false).eq('has_sugar_issues', false);
         }
       }
       
@@ -615,7 +614,7 @@ export default function Patients() {
                     { value: 'outpatient', label: 'Outpatients' },
                     { value: 'inpatient', label: 'Inpatients' },
                   ]}
-                  icon={<Filter className="w-4 h-4" />}
+                 
                 />
               </div>
               
@@ -628,7 +627,7 @@ export default function Patients() {
                     { value: 'healthy', label: 'Healthy' },
                     { value: 'critical', label: 'Critical' },
                   ]}
-                  icon={<Activity className="w-4 h-4" />}
+                  
                 />
               </div>
             </div>
@@ -788,7 +787,8 @@ export default function Patients() {
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 className="bg-white border-blue-200 focus:border-blue-500 focus:ring-blue-500"
                 placeholder="patient@example.com"
-                readOnly={editingPatient && role === 'patient'}
+                readOnly={!!editingPatient && role === 'patient'}
+
               />
             </div>
 

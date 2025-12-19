@@ -1,15 +1,15 @@
 import { useState, useEffect } from 'react';
 import { 
-  Plus, Trash2, Pill, User, Stethoscope, Calendar, Clock, 
+ Trash2, Pill, User, Stethoscope, Calendar, Clock, 
   FileText, AlertCircle, Activity, TrendingUp, ClipboardCheck, 
-  ClipboardList, ShieldCheck, Search, Eye, Download, Printer
+  ClipboardList, ShieldCheck, Search, Download, Printer
 } from 'lucide-react';
 import { useApi, apiPost, apiDelete } from '@/react-app/hooks/useApi';
 import { PrescriptionWithDetails, Doctor, Patient, Medicine } from '@/shared/types';
 import Modal from '@/react-app/components/Modal';
 import Button from '@/react-app/components/Button';
 import Input from '@/react-app/components/Input';
-import { useAuth } from '@/react-app/App'; // Import useAuth hook
+import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase'; // Import supabase client
 
 export default function Prescriptions() {
@@ -69,12 +69,7 @@ export default function Prescriptions() {
     }
     
     // Apply search filter
-    const matchesSearch = searchQuery === '' || 
-      prescription.patient_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      prescription.doctor_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      prescription.medicine_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      prescription.dosage?.toLowerCase().includes(searchQuery.toLowerCase());
-    
+
     // Apply status filter
     if (statusFilter !== '') {
       const prescribedDate = new Date(prescription.prescribed_date);
@@ -89,8 +84,7 @@ export default function Prescriptions() {
   }) || [];
 
   // For patients: get patient data
-  const currentPatient = role === 'patient' ? 
-    patients?.find(p => p.id === currentPatientId) : null;
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -1,13 +1,11 @@
 // pages/DoctorDashboard.tsx
-import { useAuth } from '@/context/AuthContext';
+import { useAuth } from '../context/AuthContext';
 import { 
   Stethoscope, 
   Calendar, 
   Users, 
   FileText, 
-  Clock, 
   TrendingUp,
-  Bell,
   LogOut
 } from 'lucide-react';
 import { useState, useEffect } from 'react';

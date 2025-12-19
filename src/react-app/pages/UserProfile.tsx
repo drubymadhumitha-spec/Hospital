@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useAuth } from '@/react-app/App';
+import { useAuth } from '../context/AuthContext'; // Or correct path
 import { 
   User, 
   Mail, 
@@ -12,13 +12,14 @@ import {
 } from 'lucide-react';
 
 export default function UserProfile() {
-  const { user, role, logout, updateUser } = useAuth();
+ const { user, role, logout } = useAuth();
+
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
-    fullName: user?.fullName || '',
+    fullName: user?.full_name || '',
     email: user?.email || '',
     phone: user?.phone || '',
-    dateOfBirth: user?.dateOfBirth || ''
+    dateOfBirth: user?.date_of_birth || ''
   });
 
   const handleSave = async () => {
@@ -29,10 +30,10 @@ export default function UserProfile() {
 
   const handleCancel = () => {
     setFormData({
-      fullName: user?.fullName || '',
+      fullName: user?.full_name || '',
       email: user?.email || '',
       phone: user?.phone || '',
-      dateOfBirth: user?.dateOfBirth || ''
+      dateOfBirth: user?.date_of_birth || ''
     });
     setIsEditing(false);
   };
@@ -69,7 +70,7 @@ export default function UserProfile() {
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold text-gray-900">My Profile</h1>
           <div className="flex items-center gap-4">
-            {getRoleBadge(role)}
+            {role && getRoleBadge(role)}
             <button
               onClick={logout}
               className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-rose-500 to-red-500 text-white rounded-xl hover:shadow-lg transition-all"
@@ -90,7 +91,7 @@ export default function UserProfile() {
                   <User className="w-12 h-12" />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-bold">{user.fullName}</h2>
+                  <h2 className="text-2xl font-bold">{user.full_name}</h2>
                   <p className="text-blue-100">{user.email}</p>
                 </div>
               </div>
@@ -122,7 +123,7 @@ export default function UserProfile() {
                     className="w-full px-4 py-3 border-2 border-blue-200 rounded-xl focus:ring-4 focus:ring-blue-200 focus:border-blue-400 transition-all outline-none"
                   />
                 ) : (
-                  <p className="px-4 py-3 bg-gray-50 rounded-xl text-gray-900">{user.fullName}</p>
+                  <p className="px-4 py-3 bg-gray-50 rounded-xl text-gray-900">{user.full_name}</p>
                 )}
               </div>
 
@@ -180,7 +181,7 @@ export default function UserProfile() {
                   />
                 ) : (
                   <p className="px-4 py-3 bg-gray-50 rounded-xl text-gray-900">
-                    {user.dateOfBirth || 'Not provided'}
+                    {user.date_of_birth || 'Not provided'}
                   </p>
                 )}
               </div>
@@ -210,3 +211,10 @@ export default function UserProfile() {
     </div>
   );
 }
+
+function updateUser(_formData: {
+  fullName: string;
+  email: string;
+  phone: string;
+  dateOfBirth: string;
+}) {}

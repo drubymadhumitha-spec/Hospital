@@ -1,22 +1,31 @@
 // src/react-app/context/AuthContext.tsx
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { useNavigate } from 'react-router';
-import { supabase } from '@/react-app/lib/supabase'; // Fix import path
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { supabase } from '../lib/supabase'; // Remove App import
 
-// Define proper types
-interface User {
+// User interface
+export interface User {
+  date_of_birth?: string;
   id: string;
   email: string;
-  role: string;
+  role: 'admin' | 'doctor' | 'receptionist' | 'patient';
+  full_name: string;
+  department?: string;
+  specialty?: string;
+  phone?: string;
+  token?: string;
+  is_active?: boolean;
+  created_at?: string;
+  last_login?: string;
 }
 
 interface AuthContextType {
   user: User | null;
+  isAuthenticated: boolean;
   role: string | null;
-  isAuthenticated: boolean; // Add this property
-  login: (email: string, password: string) => Promise<{ error: any; role: string | null }>;
-  logout: () => Promise<void>;
   loading: boolean;
+  login: (userData: User) => void;
+  logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -33,142 +42,252 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
-export const AuthProvider = ({ children }: AuthProviderProps) => {
+export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [role, setRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const navigate = useNavigate();
 
-  // Add isAuthenticated computed property
-  const isAuthenticated = !!user;
-
-  // Check for existing session
+  // Check for existing session on mount
   useEffect(() => {
-    const checkUser = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        
-        if (session?.user) {
-          // Fetch user role from profiles table
-          const { data: profile, error } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', session.user.id)
-            .single();
-
-          if (error) {
-            console.error('Error fetching profile:', error);
-            setUser(null);
-            setRole(null);
-          } else {
-            setUser({
-              id: session.user.id,
-              email: session.user.email || '',
-              role: profile?.role || 'patient'
-            });
-            setRole(profile?.role || 'patient');
-          }
-        }
-      } catch (error) {
-        console.error('Error checking user:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    checkUser();
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => { // Fix parameter types
-        if (session?.user) {
-          // Fetch user role from profiles table
-          const { data: profile, error } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', session.user.id)
-            .single();
-
-          if (!error && profile) {
-            setUser({
-              id: session.user.id,
-              email: session.user.email || '',
-              role: profile.role
-            });
-            setRole(profile.role);
-          }
-        } else {
-          setUser(null);
-          setRole(null);
-        }
-        setLoading(false);
-      }
-    );
-
-    return () => {
-      subscription.unsubscribe();
-    };
+    checkSession();
   }, []);
 
-  const login = async (email: string, password: string) => {
+  const checkSession = async () => {
+
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      // Check localStorage for session
+      const storedAuth = localStorage.getItem('medicare_auth');
 
-      if (error) {
-        return { error, role: null };
-      }
+      if (storedAuth) {
+        const userData = JSON.parse(storedAuth);
 
-      if (data.user) {
-        // Fetch user role
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', data.user.id)
-          .single();
+        // Validate session age (24 hours)
+        const sessionAge = Date.now() - (userData.timestamp || 0);
+        const maxSessionAge = 24 * 60 * 60 * 1000; // 24 hours
 
-        if (profileError) {
-          return { error: profileError, role: null };
+        if (sessionAge < maxSessionAge) {
+          // Verify user still exists in database (optional)
+          try {
+            const { data, error } = await supabase
+              .from('hospital_staff')
+              .select('*')
+              .eq('id', userData.id)
+              .eq('email', userData.email)
+              .single();
+
+
+            if (!error && data) {
+              // Update user data from database
+              const updatedUser = {
+                ...userData,
+                ...data,
+                timestamp: Date.now() // Refresh timestamp
+              };
+              setUser(updatedUser);
+              localStorage.setItem('medicare_auth', JSON.stringify(updatedUser));
+            } else {
+              // User not found in database, clear session
+              clearSession();
+            }
+          } catch (dbError) {
+            // Database error, but still keep session (offline mode)
+            console.warn('Database check failed, using cached session:', dbError);
+            setUser(userData);
+          }
+        } else {
+          // Session expired
+          clearSession();
         }
-
-        const userRole = profile?.role || 'patient';
-        setUser({
-          id: data.user.id,
-          email: data.user.email || '',
-          role: userRole
-        });
-        setRole(userRole);
-
-        return { error: null, role: userRole };
+      } else {
+        setLoading(false);
       }
-
-      return { error: new Error('Login failed'), role: null };
-    } catch (error: any) {
-      return { error, role: null };
+    } catch (error) {
+      console.error('Session check error:', error);
+      clearSession();
+    } finally {
+      setLoading(false);
     }
   };
 
-  const logout = async () => {
-    await supabase.auth.signOut();
+  const clearSession = () => {
     setUser(null);
-    setRole(null);
-    navigate('/login');
+    localStorage.removeItem('medicare_auth');
+    localStorage.removeItem('medicare_remember');
   };
+
+  const login = (userData: User) => {
+    const userWithTimestamp = {
+      ...userData,
+      timestamp: Date.now()
+    };
+    setUser(userWithTimestamp);
+    localStorage.setItem('medicare_auth', JSON.stringify(userWithTimestamp));
+
+    // Update last login in database (async, don't wait for it)
+    supabase
+      .from('hospital_staff')
+      .update({
+        last_login: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', userData.id)
+      .then(null, (error) => console.warn('Failed to update last login:', error));
+  };
+
+  const logout = async (): Promise<void> => {
+    try {
+      // Clear session
+      clearSession();
+
+      // Sign out from Supabase auth if exists
+      await supabase.auth.signOut();
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
+
+  const refreshUser = async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('hospital_staff')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+
+      if (!error && data) {
+        setUser({
+          ...user,
+          ...data,
+        });
+      }
+
+    } catch (error) {
+      console.error('Refresh user error:', error);
+    }
+  };
+
+  // Listen for storage changes (for multi-tab support)
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'medicare_auth') {
+        if (e.newValue) {
+          try {
+            const userData = JSON.parse(e.newValue);
+            setUser(userData);
+          } catch (error) {
+            console.error('Storage change parse error:', error);
+          }
+        } else {
+          setUser(null);
+        }
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
+  // Auto-logout after 24 hours
+  useEffect(() => {
+    if (!user) return;
+
+    const checkSessionTimeout =async  () => {
+      const storedAuth = localStorage.getItem('medicare_auth');
+      if (storedAuth) {
+        const userData = JSON.parse(storedAuth);
+
+        const sessionAge = Date.now() - (userData.timestamp || 0);
+        const maxSessionAge = 24 * 60 * 60 * 1000;
+
+        if (sessionAge < maxSessionAge) {
+          try {
+            const { data, error } = await supabase
+              .from('hospital_staff')
+              .select('*')
+              .eq('id', userData.id)
+              .eq('email', userData.email)
+              .single();
+
+            if (!error && data) {
+              const updatedUser = {
+                ...userData,
+                ...data,
+                timestamp: Date.now(),
+              };
+
+              setUser(updatedUser);
+              localStorage.setItem('medicare_auth', JSON.stringify(updatedUser));
+            } else {
+              clearSession();
+            }
+          } catch (dbError) {
+            console.warn('Database check failed, using cached session:', dbError);
+            setUser(userData);
+          }
+        } else {
+          clearSession();
+        }
+      } else {
+        setLoading(false);
+      }
+
+    };
+
+    // Check every minute
+    const interval = setInterval(checkSessionTimeout, 60000);
+    return () => clearInterval(interval);
+  }, [user]);
 
   const value = {
     user,
-    role,
-    isAuthenticated,
+    isAuthenticated: !!user,
+    role: user?.role || null,
+    loading,
     login,
     logout,
-    loading,
+    refreshUser
   };
 
   return (
     <AuthContext.Provider value={value}>
-      {!loading && children}
+      {children}
     </AuthContext.Provider>
   );
+};
+
+// Optional: Hook to check specific roles
+export const useRole = () => {
+  const { role } = useAuth();
+
+  return {
+    isAdmin: role === 'admin',
+    isDoctor: role === 'doctor',
+    isReceptionist: role === 'receptionist',
+    isPatient: role === 'patient',
+    hasRole: (requiredRole: string) => role === requiredRole,
+    hasAnyRole: (roles: string[]) => roles.includes(role || ''),
+  };
+};
+
+// Optional: Hook to get user-specific redirect
+export const useUserRedirect = () => {
+  const { role } = useAuth();
+
+  const getRedirectPath = () => {
+    switch (role) {
+      case 'admin':
+        return '/admin-dashboard';
+      case 'doctor':
+        return '/doctor-dashboard';
+      case 'receptionist':
+        return '/receptionist-dashboard';
+      case 'patient':
+        return '/patient-dashboard';
+      default:
+        return '/dashboard';
+    }
+  };
+
+  return { getRedirectPath };
 };

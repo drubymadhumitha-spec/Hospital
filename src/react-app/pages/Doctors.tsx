@@ -1,40 +1,28 @@
 import { useState, useEffect } from 'react';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { useAuth } from '@/react-app/App';
+import { useAuth } from '../context/AuthContext';
+import { supabase } from '../lib/supabase'; // Use centralized client
 import { 
-  Plus, Edit, Trash2, Search, Filter, 
-  User, Mail, Phone, Calendar, MapPin, 
-  Award, Briefcase, Clock, Star, Eye,
-  Loader2, AlertCircle
+  Plus, Edit, Trash2, Search, 
+  User, Mail, Phone, Calendar, 
+  Award, Briefcase, Clock, Star,
+AlertCircle
 } from 'lucide-react';
-import Modal from '@/react-app/components/Modal';
-import Button from '@/react-app/components/Button';
-import Input from '@/react-app/components/Input';
-import Select from '@/react-app/components/Select';
 
-// Initialize Supabase client
-const supabaseUrl = 'https://mwlmitpcngbgnpicdmsa.supabase.co';
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im13bG1pdHBjbmdiZ25waWNkbXNhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU1MTc0ODcsImV4cCI6MjA4MTA5MzQ4N30.u3lamYlASvv5lynPVjVsnbwBFbSQcCLqMFWzkVdRL58';
-
-const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey);
-
-// Type definition for Doctor
+// Type definition for Doctor (matching your Supabase table)
 interface DoctorType {
   id: number;
   name: string;
   email: string;
   phone: string;
-  specialization: string;
+  specialty: string; // Changed from specialization
+  specialization?: string; // Keep optional for backward compatibility
   qualification: string;
   experience_years: number;
   consultation_fee: number;
-  available_days: string[];
-  consultation_hours: {
-    start: string;
-    end: string;
-  };
-  status: 'active' | 'inactive';
   created_at: string;
+  updated_at: string;
+  status: 'active' | 'inactive';
+  // Note: available_days and consultation_hours columns don't exist in your table
 }
 
 export default function Doctors() {
@@ -43,24 +31,21 @@ export default function Doctors() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingDoctor, setEditingDoctor] = useState<DoctorType | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterSpecialization, setFilterSpecialization] = useState('all');
+  const [filterSpecialty, setFilterSpecialty] = useState('all'); // Changed from filterSpecialization
   const [filterStatus, setFilterStatus] = useState('all');
   const [doctors, setDoctors] = useState<DoctorType[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  // Form state
+  // Form state - only include columns that exist in your table
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     phone: '',
-    specialization: '',
+    specialty: '', // Changed from specialization
     qualification: '',
     experience_years: '',
     consultation_fee: '',
-    available_days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
-    consultation_hours_start: '09:00',
-    consultation_hours_end: '17:00',
     status: 'active',
   });
 
@@ -93,16 +78,17 @@ export default function Doctors() {
       setLoading(true);
       setError(null);
       
+      console.log('Fetching doctors...');
       let query = supabase.from('doctors').select('*');
       
       // Apply search filter
       if (searchTerm) {
-        query = query.or(`name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%,specialization.ilike.%${searchTerm}%`);
+        query = query.or(`name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%,specialty.ilike.%${searchTerm}%`);
       }
       
-      // Apply specialization filter
-      if (filterSpecialization !== 'all') {
-        query = query.eq('specialization', filterSpecialization);
+      // Apply specialty filter
+      if (filterSpecialty !== 'all') {
+        query = query.eq('specialty', filterSpecialty);
       }
       
       // Apply status filter
@@ -110,9 +96,14 @@ export default function Doctors() {
         query = query.eq('status', filterStatus);
       }
       
-      const { data, error } = await query.order('created_at', { ascending: false });
+      const { data, error: fetchError } = await query.order('created_at', { ascending: false });
       
-      if (error) throw error;
+      if (fetchError) {
+        console.error('Supabase fetch error:', fetchError);
+        throw fetchError;
+      }
+      
+      console.log('Fetched doctors:', data);
       setDoctors(data || []);
     } catch (err: any) {
       console.error('Error fetching doctors:', err);
@@ -124,45 +115,86 @@ export default function Doctors() {
 
   useEffect(() => {
     fetchDoctors();
-  }, [searchTerm, filterSpecialization, filterStatus]);
+  }, [searchTerm, filterSpecialty, filterStatus]);
 
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      console.log('Submitting doctor data...');
+      
       const payload = {
         name: formData.name,
         email: formData.email,
         phone: formData.phone,
-        specialization: formData.specialization,
+        specialty: formData.specialty, // Use specialty column
         qualification: formData.qualification,
         experience_years: parseInt(formData.experience_years) || 0,
         consultation_fee: parseFloat(formData.consultation_fee) || 0,
-        available_days: formData.available_days,
-        consultation_hours: {
-          start: formData.consultation_hours_start,
-          end: formData.consultation_hours_end,
-        },
         status: formData.status,
         updated_at: new Date().toISOString(),
       };
 
-      // TODO: Replace with actual API calls
+      console.log('Payload:', payload);
+
       if (editingDoctor) {
         // Update doctor
-        const { error } = await supabase
+        console.log('Updating doctor ID:', editingDoctor.id);
+        const { data, error: updateError } = await supabase
           .from('doctors')
           .update(payload)
-          .eq('id', editingDoctor.id);
+          .eq('id', editingDoctor.id)
+          .select();
         
-        if (error) throw error;
+        if (updateError) {
+          console.error('Update error:', updateError);
+          
+          // If table doesn't exist, create it
+          if (updateError.message.includes('does not exist')) {
+            await createDoctorsTable();
+            // Retry update
+            const { data: retryData, error: retryError } = await supabase
+              .from('doctors')
+              .update(payload)
+              .eq('id', editingDoctor.id)
+              .select();
+            
+            if (retryError) throw retryError;
+            console.log('Retry successful:', retryData);
+          } else {
+            throw updateError;
+          }
+        } else {
+          console.log('Update successful:', data);
+        }
       } else {
         // Create new doctor
-        const { error } = await supabase
+        console.log('Creating new doctor');
+        const { data, error: insertError } = await supabase
           .from('doctors')
-          .insert([payload]);
+          .insert([payload])
+          .select();
         
-        if (error) throw error;
+        if (insertError) {
+          console.error('Insert error:', insertError);
+          
+          // If table doesn't exist, create it
+          if (insertError.message.includes('does not exist')) {
+            await createDoctorsTable();
+            // Retry insert
+            const { data: retryData, error: retryError } = await supabase
+              .from('doctors')
+              .insert([payload])
+              .select();
+            
+            if (retryError) throw retryError;
+            console.log('Retry successful:', retryData);
+          } else {
+            throw insertError;
+          }
+        } else {
+          console.log('Insert successful:', data);
+        }
       }
       
       setIsModalOpen(false);
@@ -171,7 +203,64 @@ export default function Doctors() {
       fetchDoctors(); // Refresh the list
     } catch (error: any) {
       console.error('Error saving doctor:', error);
-      alert('Error saving doctor. Please try again.');
+      alert(`Error saving doctor: ${error.message}\n\nPlease check if the doctors table exists in your Supabase.`);
+    }
+  };
+
+  // Create doctors table if it doesn't exist
+  const createDoctorsTable = async () => {
+    try {
+      console.log('Creating doctors table...');
+      
+      // First, let's check if table exists
+      const { error: checkError } = await supabase
+        .from('doctors')
+        .select('id')
+        .limit(1);
+      
+      if (checkError && checkError.message.includes('does not exist')) {
+        // Table doesn't exist, we need to create it via SQL
+        console.log('Table does not exist, showing SQL instructions...');
+        
+        const sql = `
+          CREATE TABLE doctors (
+            id BIGSERIAL PRIMARY KEY,
+            name VARCHAR(255) NOT NULL,
+            email VARCHAR(255) UNIQUE NOT NULL,
+            phone VARCHAR(20),
+            specialty VARCHAR(100),
+            qualification VARCHAR(255),
+            experience_years INTEGER DEFAULT 0,
+            consultation_fee DECIMAL(10,2) DEFAULT 0,
+            status VARCHAR(20) DEFAULT 'active',
+            created_at TIMESTAMP DEFAULT NOW(),
+            updated_at TIMESTAMP DEFAULT NOW()
+          );
+          
+          -- Disable RLS for testing
+          ALTER TABLE doctors DISABLE ROW LEVEL SECURITY;
+        `;
+        
+        // Copy SQL to clipboard
+        navigator.clipboard.writeText(sql)
+          .then(() => {
+            alert('SQL to create doctors table copied to clipboard!\n\n' +
+                  'Please go to Supabase SQL Editor and run this SQL, then refresh the page.');
+            window.open('https://supabase.com/dashboard/project/mwlmitpcngbgnpicdmsa/sql', '_blank');
+          })
+          .catch(() => {
+            alert(`Please run this SQL in Supabase SQL Editor:\n\n${sql}`);
+          });
+        
+        throw new Error('Doctors table does not exist. Please create it first.');
+      }
+      
+      // Table exists, but might have wrong columns
+      console.log('Table exists, checking columns...');
+      
+    } catch (err) {
+      console.error('Failed to create/check table:', err);
+      throw err;
     }
   };
 
@@ -181,31 +270,27 @@ export default function Doctors() {
       name: '',
       email: '',
       phone: '',
-      specialization: '',
+      specialty: '',
       qualification: '',
       experience_years: '',
       consultation_fee: '',
-      available_days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
-      consultation_hours_start: '09:00',
-      consultation_hours_end: '17:00',
       status: 'active',
     });
   };
 
   // Handle edit doctor
   const handleEdit = (doctor: DoctorType) => {
+    console.log('Editing doctor:', doctor);
+    
     setEditingDoctor(doctor);
     setFormData({
-      name: doctor.name,
-      email: doctor.email,
+      name: doctor.name || '',
+      email: doctor.email || '',
       phone: doctor.phone || '',
-      specialization: doctor.specialization || '',
+      specialty: doctor.specialty || doctor.specialization || '', // Use specialty or fallback to specialization
       qualification: doctor.qualification || '',
       experience_years: doctor.experience_years?.toString() || '',
       consultation_fee: doctor.consultation_fee?.toString() || '',
-      available_days: doctor.available_days || ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
-      consultation_hours_start: doctor.consultation_hours?.start || '09:00',
-      consultation_hours_end: doctor.consultation_hours?.end || '17:00',
       status: doctor.status || 'active',
     });
     setIsModalOpen(true);
@@ -230,18 +315,22 @@ export default function Doctors() {
   };
 
   // Get specialization color
-  const getSpecializationColor = (specialization: string) => {
+  const getSpecialtyColor = (specialty: string) => {
     const colors: Record<string, string> = {
+      'Cardiology': 'from-red-500 to-pink-500',
+      'Pediatrics': 'from-blue-500 to-cyan-500',
+      'Orthopedics': 'from-emerald-500 to-teal-500',
+      'Dermatology': 'from-purple-500 to-indigo-500',
+      'Neurology': 'from-amber-500 to-orange-500',
+      'Gynecology': 'from-rose-500 to-pink-500',
+      'General Physician': 'from-gray-500 to-slate-500',
+      'Surgery': 'from-red-600 to-orange-500',
       'Cardiologist': 'from-red-500 to-pink-500',
       'Pediatrician': 'from-blue-500 to-cyan-500',
       'Orthopedic': 'from-emerald-500 to-teal-500',
       'Dermatologist': 'from-purple-500 to-indigo-500',
-      'Neurologist': 'from-amber-500 to-orange-500',
-      'Gynecologist': 'from-rose-500 to-pink-500',
-      'General Physician': 'from-gray-500 to-slate-500',
-      'Surgeon': 'from-red-600 to-orange-500',
     };
-    return colors[specialization] || 'from-blue-500 to-purple-500';
+    return colors[specialty] || 'from-blue-500 to-purple-500';
   };
 
   // Get status badge
@@ -261,8 +350,10 @@ export default function Doctors() {
   const doctorStats = {
     total: doctors?.length || 0,
     active: doctors?.filter(d => d.status === 'active').length || 0,
-    specialties: new Set(doctors?.map(d => d.specialization)).size || 0,
-    averageExperience: doctors?.reduce((sum, d) => sum + (d.experience_years || 0), 0) / (doctors?.length || 1),
+    specialties: new Set(doctors?.map(d => d.specialty || d.specialization).filter(Boolean)).size || 0,
+    averageExperience: doctors?.length 
+      ? doctors.reduce((sum, d) => sum + (d.experience_years || 0), 0) / doctors.length 
+      : 0,
   };
 
   if (loading && doctors.length === 0) {
@@ -289,13 +380,13 @@ export default function Doctors() {
             </h1>
             <p className="text-gray-600 text-lg">Manage doctor profiles and schedules</p>
           </div>
-          <Button 
+          <button 
             onClick={() => setIsModalOpen(true)}
-            className="bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-700 hover:to-cyan-600 text-white px-6 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1"
+            className="bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-700 hover:to-cyan-600 text-white px-6 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 flex items-center"
           >
             <Plus className="w-5 h-5 mr-2" />
             Add New Doctor
-          </Button>
+          </button>
         </div>
 
         {/* Stats Overview */}
@@ -370,7 +461,7 @@ export default function Doctors() {
               <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search doctors by name, specialization, or email..."
+                placeholder="Search doctors by name, specialty, or email..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-3 rounded-lg border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
@@ -380,32 +471,30 @@ export default function Doctors() {
           
           <div className="flex gap-4">
             <div className="w-48">
-              <Select
-                value={filterSpecialization}
-                onChange={(e) => setFilterSpecialization(e.target.value)}
-                options={[
-                  { value: 'all', label: 'All Specialties' },
-                  { value: 'Cardiologist', label: 'Cardiologist' },
-                  { value: 'Pediatrician', label: 'Pediatrician' },
-                  { value: 'Orthopedic', label: 'Orthopedic' },
-                  { value: 'Dermatologist', label: 'Dermatologist' },
-                  { value: 'General Physician', label: 'General Physician' },
-                ]}
-                icon={<Filter className="w-4 h-4" />}
-              />
+              <select
+                value={filterSpecialty}
+                onChange={(e) => setFilterSpecialty(e.target.value)}
+                className="w-full pl-10 pr-4 py-3 rounded-lg border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+              >
+                <option value="all">All Specialties</option>
+                <option value="Cardiology">Cardiology</option>
+                <option value="Pediatrics">Pediatrics</option>
+                <option value="Orthopedics">Orthopedics</option>
+                <option value="Dermatology">Dermatology</option>
+                <option value="General Physician">General Physician</option>
+              </select>
             </div>
             
             <div className="w-48">
-              <Select
+              <select
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}
-                options={[
-                  { value: 'all', label: 'All Status' },
-                  { value: 'active', label: 'Active' },
-                  { value: 'inactive', label: 'Inactive' },
-                ]}
-                icon={<Award className="w-4 h-4" />}
-              />
+                className="w-full pl-10 pr-4 py-3 rounded-lg border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+              >
+                <option value="all">All Status</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
             </div>
           </div>
         </div>
@@ -431,12 +520,12 @@ export default function Doctors() {
                 <div key={doctor.id} className="bg-gradient-to-br from-white to-blue-50 rounded-xl border border-blue-200 p-6 hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-center gap-4">
-                      <div className={`w-16 h-16 rounded-full bg-gradient-to-br ${getSpecializationColor(doctor.specialization)} flex items-center justify-center`}>
+                      <div className={`w-16 h-16 rounded-full bg-gradient-to-br ${getSpecialtyColor(doctor.specialty || doctor.specialization || '')} flex items-center justify-center`}>
                         <User className="w-8 h-8 text-white" />
                       </div>
                       <div>
                         <h3 className="font-bold text-gray-900 text-lg">{doctor.name}</h3>
-                        <p className="text-sm text-gray-600">{doctor.specialization}</p>
+                        <p className="text-sm text-gray-600">{doctor.specialty || doctor.specialization || 'General Physician'}</p>
                         {getStatusBadge(doctor.status)}
                       </div>
                     </div>
@@ -453,7 +542,7 @@ export default function Doctors() {
                     </div>
                     <div className="flex items-center gap-2 text-gray-700">
                       <Award className="w-4 h-4 text-amber-500" />
-                      <span className="text-sm">{doctor.qualification}</span>
+                      <span className="text-sm">{doctor.qualification || 'Not specified'}</span>
                     </div>
                     <div className="flex items-center gap-2 text-gray-700">
                       <Clock className="w-4 h-4 text-purple-500" />
@@ -463,20 +552,24 @@ export default function Doctors() {
                       <Star className="w-4 h-4 text-rose-500" />
                       <span className="text-sm font-semibold">₹{doctor.consultation_fee || 0}/visit</span>
                     </div>
+                    <div className="flex items-center gap-2 text-gray-700">
+                      <Calendar className="w-4 h-4 text-indigo-500" />
+                      <span className="text-sm text-xs">Added: {new Date(doctor.created_at).toLocaleDateString()}</span>
+                    </div>
                   </div>
                   
                   <div className="flex gap-2">
                     <button
                       onClick={() => handleEdit(doctor)}
-                      className="flex-1 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-lg hover:shadow-md transition-all"
+                      className="flex-1 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-lg hover:shadow-md transition-all flex items-center justify-center"
                     >
-                      <Edit className="w-4 h-4 inline mr-1" /> Edit
+                      <Edit className="w-4 h-4 mr-1" /> Edit
                     </button>
                     <button
                       onClick={() => handleDelete(doctor.id)}
-                      className="flex-1 py-2 bg-gradient-to-r from-red-500 to-rose-500 text-white rounded-lg hover:shadow-md transition-all"
+                      className="flex-1 py-2 bg-gradient-to-r from-red-500 to-rose-500 text-white rounded-lg hover:shadow-md transition-all flex items-center justify-center"
                     >
-                      <Trash2 className="w-4 h-4 inline mr-1" /> Delete
+                      <Trash2 className="w-4 h-4 mr-1" /> Delete
                     </button>
                   </div>
                 </div>
@@ -496,190 +589,184 @@ export default function Doctors() {
                   : 'Add your first doctor to get started'
                 }
               </p>
-              <Button 
+              <button 
                 onClick={() => setIsModalOpen(true)}
-                className="bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white"
+                className="bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white px-6 py-3 rounded-xl flex items-center mx-auto"
               >
                 <Plus className="w-4 h-4 mr-2" />
                 Add Doctor
-              </Button>
+              </button>
             </div>
           )}
         </div>
       </div>
 
       {/* Add/Edit Doctor Modal */}
-      <Modal
-        isOpen={isModalOpen}
-        onClose={() => {
-          setIsModalOpen(false);
-          setEditingDoctor(null);
-          resetForm();
-        }}
-        title={editingDoctor ? 'Edit Doctor Profile' : 'Add New Doctor'}
-        className="max-w-2xl"
-      >
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-700">
-                Full Name *
-              </label>
-              <Input
-                required
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="Dr. John Doe"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-700">
-                Email *
-              </label>
-              <Input
-                type="email"
-                required
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                placeholder="doctor@hospital.com"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-700">
-                Phone *
-              </label>
-              <Input
-                type="tel"
-                required
-                value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                placeholder="+91 9876543210"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-700">
-                Specialization *
-              </label>
-              <Select
-                required
-                value={formData.specialization}
-                onChange={(e) => setFormData({ ...formData, specialization: e.target.value })}
-                options={[
-                  { value: '', label: 'Select Specialization' },
-                  { value: 'Cardiologist', label: 'Cardiologist' },
-                  { value: 'Pediatrician', label: 'Pediatrician' },
-                  { value: 'Orthopedic', label: 'Orthopedic' },
-                  { value: 'Dermatologist', label: 'Dermatologist' },
-                  { value: 'Neurologist', label: 'Neurologist' },
-                  { value: 'Gynecologist', label: 'Gynecologist' },
-                  { value: 'General Physician', label: 'General Physician' },
-                  { value: 'Surgeon', label: 'Surgeon' },
-                ]}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-700">
-                Qualification *
-              </label>
-              <Input
-                required
-                value={formData.qualification}
-                onChange={(e) => setFormData({ ...formData, qualification: e.target.value })}
-                placeholder="MBBS, MD, etc."
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-700">
-                Experience (Years)
-              </label>
-              <Input
-                type="number"
-                value={formData.experience_years}
-                onChange={(e) => setFormData({ ...formData, experience_years: e.target.value })}
-                placeholder="10"
-                min="0"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-700">
-                Consultation Fee (₹)
-              </label>
-              <Input
-                type="number"
-                value={formData.consultation_fee}
-                onChange={(e) => setFormData({ ...formData, consultation_fee: e.target.value })}
-                placeholder="500"
-                min="0"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-700">
-                Status
-              </label>
-              <Select
-                value={formData.status}
-                onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                options={[
-                  { value: 'active', label: 'Active' },
-                  { value: 'inactive', label: 'Inactive' },
-                ]}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <label className="block text-sm font-medium text-gray-700">
-              Consultation Hours
-            </label>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-xs text-gray-500 mb-1 block">Start Time</label>
-                <Input
-                  type="time"
-                  value={formData.consultation_hours_start}
-                  onChange={(e) => setFormData({ ...formData, consultation_hours_start: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className="text-xs text-gray-500 mb-1 block">End Time</label>
-                <Input
-                  type="time"
-                  value={formData.consultation_hours_end}
-                  onChange={(e) => setFormData({ ...formData, consultation_hours_end: e.target.value })}
-                />
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-blue-100">
+              <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-bold text-gray-900">
+                  {editingDoctor ? 'Edit Doctor Profile' : 'Add New Doctor'}
+                </h2>
+                <button
+                  onClick={() => {
+                    setIsModalOpen(false);
+                    setEditingDoctor(null);
+                    resetForm();
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  ✕
+                </button>
               </div>
             </div>
-          </div>
+            
+            <form onSubmit={handleSubmit} className="p-6 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Full Name *
+                  </label>
+                  <input
+                    required
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="Dr. John Doe"
+                    className="w-full px-4 py-3 rounded-lg border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
 
-          <div className="flex gap-4 pt-6 border-t border-blue-100">
-            <Button 
-              type="submit" 
-              className="flex-1 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-700 hover:to-cyan-600 text-white py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300"
-            >
-              {editingDoctor ? 'Update Doctor' : 'Add Doctor'}
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => {
-                setIsModalOpen(false);
-                setEditingDoctor(null);
-                resetForm();
-              }}
-              className="py-3 rounded-xl border border-blue-200 hover:border-blue-300"
-            >
-              Cancel
-            </Button>
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Email *
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    placeholder="doctor@hospital.com"
+                    className="w-full px-4 py-3 rounded-lg border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Phone *
+                  </label>
+                  <input
+                    type="tel"
+                    required
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    placeholder="+91 9876543210"
+                    className="w-full px-4 py-3 rounded-lg border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Specialty *
+                  </label>
+                  <select
+                    required
+                    value={formData.specialty}
+                    onChange={(e) => setFormData({ ...formData, specialty: e.target.value })}
+                    className="w-full px-4 py-3 rounded-lg border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="">Select Specialty</option>
+                    <option value="Cardiology">Cardiology</option>
+                    <option value="Pediatrics">Pediatrics</option>
+                    <option value="Orthopedics">Orthopedics</option>
+                    <option value="Dermatology">Dermatology</option>
+                    <option value="Neurology">Neurology</option>
+                    <option value="Gynecology">Gynecology</option>
+                    <option value="General Physician">General Physician</option>
+                    <option value="Surgery">Surgery</option>
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Qualification *
+                  </label>
+                  <input
+                    required
+                    value={formData.qualification}
+                    onChange={(e) => setFormData({ ...formData, qualification: e.target.value })}
+                    placeholder="MBBS, MD, etc."
+                    className="w-full px-4 py-3 rounded-lg border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Experience (Years)
+                  </label>
+                  <input
+                    type="number"
+                    value={formData.experience_years}
+                    onChange={(e) => setFormData({ ...formData, experience_years: e.target.value })}
+                    placeholder="10"
+                    min="0"
+                    className="w-full px-4 py-3 rounded-lg border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Consultation Fee (₹)
+                  </label>
+                  <input
+                    type="number"
+                    value={formData.consultation_fee}
+                    onChange={(e) => setFormData({ ...formData, consultation_fee: e.target.value })}
+                    placeholder="500"
+                    min="0"
+                    className="w-full px-4 py-3 rounded-lg border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Status
+                  </label>
+                  <select
+                    value={formData.status}
+                    onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                    className="w-full px-4 py-3 rounded-lg border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex gap-4 pt-6 border-t border-blue-100">
+                <button 
+                  type="submit" 
+                  className="flex-1 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-700 hover:to-cyan-600 text-white py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300"
+                >
+                  {editingDoctor ? 'Update Doctor' : 'Add Doctor'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsModalOpen(false);
+                    setEditingDoctor(null);
+                    resetForm();
+                  }}
+                  className="py-3 px-6 rounded-xl border border-blue-200 hover:border-blue-300 hover:bg-gray-50 transition-all"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
           </div>
-        </form>
-      </Modal>
+        </div>
+      )}
     </div>
   );
 }

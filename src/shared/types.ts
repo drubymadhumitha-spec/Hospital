@@ -207,13 +207,15 @@ export const CreatePatientHistorySchema = z.object({
 export type AppointmentWithDetails = Appointment & {
   doctor_name: string;
   patient_name: string;
-  doctor_specialty: string;
+  doctor_specialty?: string;
+
 };
 
 export type PrescriptionWithDetails = Prescription & {
   patient_name: string;
   doctor_name: string;
   medicine_name: string;
+  doctor_specialty?: string;
 };
 
 export type PaymentWithDetails = Payment & {

@@ -1,61 +1,100 @@
-// src/react-app/components/ProtectedRoute.tsx
-import { Navigate } from 'react-router';
-import { useAuth } from '@/react-app/context/AuthContext';
+// src/react-app/context/AuthContext.tsx
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
-interface ProtectedRouteProps {
-  children: React.ReactNode;
-  allowedRoles?: ('admin' | 'doctor' | 'receptionist' | 'patient')[];
-  requireAuth?: boolean;
+interface User {
+  id: string;
+  email: string;
+  role: 'admin' | 'doctor' | 'receptionist';
+  full_name: string;
+  department?: string;
+  specialty?: string;
+  phone?: string;
+  token?: string;
 }
 
-const ProtectedRoute = ({ 
-  children, 
-  allowedRoles = [], 
-  requireAuth = true 
-}: ProtectedRouteProps) => {
-  const { isAuthenticated, role, loading } = useAuth();
+interface AuthContextType {
+  user: User | null;
+  isAuthenticated: boolean;
+  role: string | null;
+  loading: boolean;
+  login: (userData: User) => void;
+  logout: () => void;
+}
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent"></div>
-      </div>
-    );
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
   }
-
-  // If authentication is required but user is not authenticated
-  if (requireAuth && !isAuthenticated) {
-    return <Navigate to="/login" replace />;
-  }
-
-  // If authentication is not required and user is authenticated, redirect to dashboard
-  if (!requireAuth && isAuthenticated) {
-    return <Navigate to="/dashboard" replace />;
-  }
-
-  // Check role-based access if allowedRoles is specified
-  if (allowedRoles.length > 0 && role) {
-    // Ensure role matches one of the allowed types
-    const userRole = role as 'admin' | 'doctor' | 'receptionist' | 'patient';
-    
-    if (!allowedRoles.includes(userRole)) {
-      // Redirect to unauthorized or dashboard based on role
-      switch (userRole) {
-        case 'patient':
-          return <Navigate to="/patient-dashboard" replace />;
-        case 'doctor':
-          return <Navigate to="/doctor-dashboard" replace />;
-        case 'admin':
-          return <Navigate to="/admin-dashboard" replace />;
-        case 'receptionist':
-          return <Navigate to="/receptionist-dashboard" replace />;
-        default:
-          return <Navigate to="/dashboard" replace />;
-      }
-    }
-  }
-
-  return <>{children}</>;
+  return context;
 };
 
-export default ProtectedRoute;
+interface AuthProviderProps {
+  children: ReactNode;
+}
+
+export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Check localStorage for existing session on mount
+    const storedAuth = localStorage.getItem('medicare_auth');
+    
+    if (storedAuth) {
+      try {
+        const userData = JSON.parse(storedAuth);
+        
+        // Check if session is still valid (less than 24 hours old)
+        const sessionAge = Date.now() - (userData.timestamp || 0);
+        const maxSessionAge = 24 * 60 * 60 * 1000; // 24 hours
+        
+        if (sessionAge < maxSessionAge) {
+          setUser(userData);
+        } else {
+          // Session expired
+          localStorage.removeItem('medicare_auth');
+          localStorage.removeItem('medicare_remember');
+        }
+      } catch (error) {
+        console.error('Error parsing stored auth:', error);
+        localStorage.removeItem('medicare_auth');
+        localStorage.removeItem('medicare_remember');
+      }
+    }
+    
+    setLoading(false);
+  }, []);
+
+  const login = (userData: User) => {
+    const userWithTimestamp = {
+      ...userData,
+      timestamp: Date.now()
+    };
+    setUser(userWithTimestamp);
+    localStorage.setItem('medicare_auth', JSON.stringify(userWithTimestamp));
+  };
+
+  const logout = () => {
+    setUser(null);
+    localStorage.removeItem('medicare_auth');
+    // Don't remove remember me email
+  };
+
+  const value = {
+    user,
+    isAuthenticated: !!user,
+    role: user?.role || null,
+    loading,
+    login,
+    logout
+  };
+
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  );
+};

@@ -13,3 +13,4 @@ npm run dev
 "# Hospital" 
 "# Hospital" 
 "# Hospital" 
+"# ruby-hospital" 

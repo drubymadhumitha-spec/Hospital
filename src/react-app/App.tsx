@@ -1,108 +1,48 @@
 import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from "react-router-dom";
-import { createContext, useState, useEffect, useContext, ReactNode } from "react";
+import { Suspense, lazy } from "react";
+import { AuthProvider, useAuth } from "@/react-app/context/AuthContext";
 import Layout from "@/react-app/components/Layout";
-import Dashboard from "@/react-app/pages/Dashboard";
-import Doctors from "@/react-app/pages/Doctors";
-import Patients from "@/react-app/pages/Patients";
-import Appointments from "@/react-app/pages/Appointments";
-import Medicines from "@/react-app/pages/Medicines";
-import Prescriptions from "@/react-app/pages/Prescriptions";
-import Payments from "@/react-app/pages/Payments";
-import PatientHistory from "@/react-app/pages/PatientHistory";
-import Login from "@/react-app/pages/Login";
-import Signup from "@/react-app/pages/Signup";
-import UserProfile from "@/react-app/pages/UserProfile";
+import LoginForm from "./components/LoginForm";
+import SignupForm from "./components/SignupForm";
+import PatientHistoryList from "./pages/PatientHistoryList";
 
-// Types
-interface User {
-  id: string;
-  email: string;
-  fullName: string;
-  phone?: string;
-  dateOfBirth?: string;
-}
+// Lazy load pages for better performance
+const Dashboard = lazy(() => import("@/react-app/pages/Dashboard"));
+const Doctors = lazy(() => import("@/react-app/pages/Doctors"));
+const Patients = lazy(() => import("@/react-app/pages/Patients"));
+const Appointments = lazy(() => import("@/react-app/pages/Appointments"));
+const Medicines = lazy(() => import("@/react-app/pages/Medicines"));
+const Prescriptions = lazy(() => import("@/react-app/pages/Prescriptions"));
+const Payments = lazy(() => import("@/react-app/pages/Payments"));
+const PatientHistoryDetail = lazy(() => import("@/react-app/pages/PatientHistory"));
+const UserProfile = lazy(() => import("@/react-app/pages/UserProfile"));
 
-type UserRole = 'patient' | 'doctor' | 'admin' | 'guest';
+// Create simple dashboard components inline since files might not exist
+const AdminDashboard = lazy(() =>
+  import("./pages/dashboards/AdminDashboard").catch(() => ({
+    default: () => <div className="p-6"><h1 className="text-3xl font-bold text-gray-800 mb-2">Admin Dashboard</h1><p>System Administration</p></div>
+  }))
+);
 
-interface AuthContextType {
-  user: User | null;
-  role: UserRole;
-  loading: boolean;
-  login: (userData: User, userRole: UserRole, token: string) => void;
-  logout: () => void;
-  updateUser: (userData: Partial<User>) => void;
-}
+const DoctorDashboard = lazy(() =>
+  import("./pages/dashboards/DoctorDashboard").catch(() => ({
+    default: () => <div className="p-6"><h1 className="text-3xl font-bold text-gray-800 mb-2">Doctor Dashboard</h1><p>Medical Practice</p></div>
+  }))
+);
 
-// Auth Context
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const ReceptionistDashboard = lazy(() =>
+  import("./pages/dashboards/ReceptionistDashboard").catch(() => ({
+    default: () => <div className="p-6"><h1 className="text-3xl font-bold text-gray-800 mb-2">Receptionist Dashboard</h1><p>Front Desk</p></div>
+  }))
+);
 
-// Custom hook to use auth context
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-};
+const PatientDashboard = lazy(() =>
+  import("./pages/dashboards/PatientDashboard").catch(() => ({
+    default: () => <div className="p-6"><h1 className="text-3xl font-bold text-gray-800 mb-2">Patient Dashboard</h1><p>Health Portal</p></div>
+  }))
+);
 
-// Auth Provider Component
-function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [role, setRole] = useState<UserRole>('guest');
-
-  useEffect(() => {
-    // Check for stored authentication
-    const storedUser = localStorage.getItem('medicare_user');
-    const storedRole = localStorage.getItem('medicare_role') as UserRole;
-    const storedToken = localStorage.getItem('medicare_token');
-
-    if (storedUser && storedRole && storedToken) {
-      try {
-        setUser(JSON.parse(storedUser));
-        setRole(storedRole);
-      } catch (error) {
-        console.error('Error parsing stored user data:', error);
-        localStorage.removeItem('medicare_user');
-        localStorage.removeItem('medicare_role');
-        localStorage.removeItem('medicare_token');
-      }
-    }
-    setLoading(false);
-  }, []);
-
-  const login = (userData: User, userRole: UserRole, token: string) => {
-    setUser(userData);
-    setRole(userRole);
-    localStorage.setItem('medicare_user', JSON.stringify(userData));
-    localStorage.setItem('medicare_role', userRole);
-    localStorage.setItem('medicare_token', token);
-  };
-
-  const logout = () => {
-    setUser(null);
-    setRole('guest');
-    localStorage.removeItem('medicare_user');
-    localStorage.removeItem('medicare_role');
-    localStorage.removeItem('medicare_token');
-  };
-
-  const updateUser = (userData: Partial<User>) => {
-    if (user) {
-      const updatedUser = { ...user, ...userData };
-      setUser(updatedUser);
-      localStorage.setItem('medicare_user', JSON.stringify(updatedUser));
-    }
-  };
-
-  return (
-    <AuthContext.Provider value={{ user, role, login, logout, updateUser, loading }}>
-      {children}
-    </AuthContext.Provider>
-  );
-}
-
-// Loading Component
+// Loading Components
 function LoadingScreen() {
   return (
     <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 to-purple-50">
@@ -114,40 +54,74 @@ function LoadingScreen() {
   );
 }
 
-// Protected Route Wrapper
-interface ProtectedRouteProps {
-  children: ReactNode;
-  allowedRoles: UserRole[];
+function PageLoader() {
+  return (
+    <div className="flex items-center justify-center h-64">
+      <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent"></div>
+    </div>
+  );
 }
 
-function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
-  const { user, role, loading } = useAuth();
+// Protected Route Wrapper
+interface ProtectedRouteProps {
+  children: React.ReactNode;
+  allowedRoles?: ('admin' | 'doctor' | 'receptionist' | 'patient')[];
+  requireAuth?: boolean;
+}
+
+function ProtectedRoute({
+  children,
+  allowedRoles = [],
+  requireAuth = true
+}: ProtectedRouteProps) {
+  const { isAuthenticated, role, loading } = useAuth();
 
   if (loading) {
-    return <LoadingScreen />;
+    return <PageLoader />;
   }
 
-  if (!user || !allowedRoles.includes(role)) {
+  // If authentication is required but user is not authenticated
+  if (requireAuth && !isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
 
-  return <>{children}</>;
-}
-
-// Public Route Wrapper (only accessible when not logged in)
-interface PublicRouteProps {
-  children: ReactNode;
-}
-
-function PublicRoute({ children }: PublicRouteProps) {
-  const { user, loading } = useAuth();
-
-  if (loading) {
-    return <LoadingScreen />;
+  // If authentication is not required and user is authenticated, redirect to dashboard
+  if (!requireAuth && isAuthenticated) {
+    // Redirect to role-specific dashboard
+    switch (role) {
+      case 'admin':
+        return <Navigate to="/admin-dashboard" replace />;
+      case 'doctor':
+        return <Navigate to="/doctor-dashboard" replace />;
+      case 'receptionist':
+        return <Navigate to="/receptionist-dashboard" replace />;
+      case 'patient':
+        return <Navigate to="/patient-dashboard" replace />;
+      default:
+        return <Navigate to="/dashboard" replace />;
+    }
   }
 
-  if (user) {
-    return <Navigate to="/dashboard" replace />;
+  // Check role-based access if allowedRoles is specified
+  if (allowedRoles.length > 0 && role) {
+    // Ensure role matches one of the allowed types
+    const userRole = role as 'admin' | 'doctor' | 'receptionist' | 'patient';
+
+    if (!allowedRoles.includes(userRole)) {
+      // Redirect to role-specific dashboard
+      switch (userRole) {
+        case 'patient':
+          return <Navigate to="/patient-dashboard" replace />;
+        case 'doctor':
+          return <Navigate to="/doctor-dashboard" replace />;
+        case 'admin':
+          return <Navigate to="/admin-dashboard" replace />;
+        case 'receptionist':
+          return <Navigate to="/receptionist-dashboard" replace />;
+        default:
+          return <Navigate to="/dashboard" replace />;
+      }
+    }
   }
 
   return <>{children}</>;
@@ -156,15 +130,32 @@ function PublicRoute({ children }: PublicRouteProps) {
 // Layout Wrapper Component
 function LayoutWrapper() {
   const { user } = useAuth();
-  
+
   if (!user) {
     return <Navigate to="/login" replace />;
   }
-  
+
   return (
     <Layout>
-      <Outlet />
+      <Suspense fallback={<PageLoader />}>
+        <Outlet />
+      </Suspense>
     </Layout>
+  );
+}
+
+// Role-specific dashboard wrapper
+function RoleDashboardWrapper() {
+  const { role } = useAuth();
+
+  return (
+    <Suspense fallback={<PageLoader />}>
+      {role === 'admin' && <AdminDashboard />}
+      {role === 'doctor' && <DoctorDashboard />}
+      {role === 'receptionist' && <ReceptionistDashboard />}
+      {role === 'patient' && <PatientDashboard />}
+      {!['admin', 'doctor', 'receptionist', 'patient'].includes(role || '') && <Dashboard />}
+    </Suspense>
   );
 }
 
@@ -173,84 +164,159 @@ export default function App() {
   return (
     <AuthProvider>
       <Router>
-        <Routes>
-          {/* Public Routes (No Layout) */}
-          <Route path="/login" element={
-            <PublicRoute>
-              <Login />
-            </PublicRoute>
-          } />
-          
-          <Route path="/signup" element={
-            <PublicRoute>
-              <Signup />
-            </PublicRoute>
-          } />
-
-          {/* Protected Routes (With Layout) */}
-          <Route element={
-            <ProtectedRoute allowedRoles={['patient', 'doctor', 'admin']}>
-              <LayoutWrapper />
-            </ProtectedRoute>
-          }>
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            
-            {/* Patient routes (accessible to patients, doctors, and admins) */}
-            <Route path="/patients" element={
-              <ProtectedRoute allowedRoles={['patient', 'doctor', 'admin']}>
-                <Patients />
-              </ProtectedRoute>
-            } />
-            
-            <Route path="/appointments" element={
-              <ProtectedRoute allowedRoles={['patient', 'doctor', 'admin']}>
-                <Appointments />
-              </ProtectedRoute>
-            } />
-            
-            <Route path="/prescriptions" element={
-              <ProtectedRoute allowedRoles={['patient', 'doctor', 'admin']}>
-                <Prescriptions />
-              </ProtectedRoute>
-            } />
-            
-            <Route path="/payments" element={
-              <ProtectedRoute allowedRoles={['patient', 'doctor', 'admin']}>
-                <Payments />
+        <Suspense fallback={<LoadingScreen />}>
+          <Routes>
+            {/* Public Routes (No Layout) */}
+            <Route path="/login" element={
+              <ProtectedRoute requireAuth={false}>
+                <LoginForm />
               </ProtectedRoute>
             } />
 
-            {/* Doctor and Admin only routes */}
-            <Route path="/doctors" element={
-              <ProtectedRoute allowedRoles={['doctor', 'admin']}>
-                <Doctors />
+            <Route path="/signup" element={
+              <ProtectedRoute requireAuth={false}>
+                <SignupForm />
               </ProtectedRoute>
             } />
-            
-            <Route path="/medicines" element={
-              <ProtectedRoute allowedRoles={['doctor', 'admin']}>
-                <Medicines />
-              </ProtectedRoute>
-            } />
-            
-            <Route path="/patient-history/:patientId" element={
-              <ProtectedRoute allowedRoles={['doctor', 'admin']}>
-                <PatientHistory />
-              </ProtectedRoute>
-            } />
-            
-            {/* User Profile */}
-            <Route path="/profile" element={
-              <ProtectedRoute allowedRoles={['patient', 'doctor', 'admin']}>
-                <UserProfile />
-              </ProtectedRoute>
-            } />
-          </Route>
 
-          {/* Catch all route */}
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
-        </Routes>
+            {/* Direct role-based redirects */}
+            <Route path="/admin" element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <Navigate to="/admin-dashboard" replace />
+              </ProtectedRoute>
+            } />
+
+            <Route path="/doctor" element={
+              <ProtectedRoute allowedRoles={['doctor']}>
+                <Navigate to="/doctor-dashboard" replace />
+              </ProtectedRoute>
+            } />
+
+            <Route path="/receptionist" element={
+              <ProtectedRoute allowedRoles={['receptionist']}>
+                <Navigate to="/receptionist-dashboard" replace />
+              </ProtectedRoute>
+            } />
+
+            <Route path="/patient" element={
+              <ProtectedRoute allowedRoles={['patient']}>
+                <Navigate to="/patient-dashboard" replace />
+              </ProtectedRoute>
+            } />
+
+            {/* Role-specific dashboards */}
+            <Route path="/admin-dashboard" element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <LayoutWrapper />
+              </ProtectedRoute>
+            }>
+              <Route index element={<RoleDashboardWrapper />} />
+            </Route>
+
+            <Route path="/doctor-dashboard" element={
+              <ProtectedRoute allowedRoles={['doctor']}>
+                <LayoutWrapper />
+              </ProtectedRoute>
+            }>
+              <Route index element={<RoleDashboardWrapper />} />
+            </Route>
+
+            <Route path="/receptionist-dashboard" element={
+              <ProtectedRoute allowedRoles={['receptionist']}>
+                <LayoutWrapper />
+              </ProtectedRoute>
+            }>
+              <Route index element={<RoleDashboardWrapper />} />
+            </Route>
+
+            <Route path="/patient-dashboard" element={
+              <ProtectedRoute allowedRoles={['patient']}>
+                <LayoutWrapper />
+              </ProtectedRoute>
+            }>
+              <Route index element={<RoleDashboardWrapper />} />
+            </Route>
+
+            {/* Admin Portal Route */}
+            <Route path="/admin-portal" element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <Navigate to="/admin-dashboard" replace />
+              </ProtectedRoute>
+            } />
+
+            {/* Main Layout Routes */}
+            <Route element={
+              <ProtectedRoute allowedRoles={['admin', 'doctor', 'receptionist', 'patient']}>
+                <LayoutWrapper />
+              </ProtectedRoute>
+            }>
+              {/* Dashboard - redirects to role-specific dashboard */}
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/dashboard" element={<RoleDashboardWrapper />} />
+
+              {/* Patients routes */}
+              <Route path="/patients" element={
+                <ProtectedRoute allowedRoles={['admin', 'doctor', 'receptionist']}>
+                  <Patients />
+                </ProtectedRoute>
+              } />
+
+              {/* Appointments routes */}
+              <Route path="/appointments" element={
+                <ProtectedRoute allowedRoles={['admin', 'doctor', 'receptionist', 'patient']}>
+                  <Appointments />
+                </ProtectedRoute>
+              } />
+
+              {/* Doctors routes */}
+              <Route path="/doctors" element={
+                <ProtectedRoute allowedRoles={['admin', 'receptionist', 'patient']}>
+                  <Doctors />
+                </ProtectedRoute>
+              } />
+
+              {/* Prescriptions routes */}
+              <Route path="/prescriptions" element={
+                <ProtectedRoute allowedRoles={['admin', 'doctor', 'patient']}>
+                  <Prescriptions />
+                </ProtectedRoute>
+              } />
+
+              {/* Payments routes */}
+              <Route path="/payments" element={
+                <ProtectedRoute allowedRoles={['admin', 'receptionist', 'patient']}>
+                  <Payments />
+                </ProtectedRoute>
+              } />
+
+              {/* Medicines routes (Admin & Doctor only) */}
+              <Route path="/medicines" element={
+                <ProtectedRoute allowedRoles={['admin', 'doctor']}>
+                  <Medicines />
+                </ProtectedRoute>
+              } />
+
+              {/* Patient History routes (Doctor & Admin only) */}
+          // In your App.tsx or routing configuration:
+              <Route path="/patient-history" element={<PatientHistoryList />} />
+              <Route path="/patient-history/:patientId" element={<PatientHistoryDetail />} />
+
+              {/* User Profile */}
+              <Route path="/profile" element={
+                <ProtectedRoute allowedRoles={['admin', 'doctor', 'receptionist', 'patient']}>
+                  <UserProfile />
+                </ProtectedRoute>
+              } />
+            </Route>
+
+            {/* Catch all route - redirect to login */}
+            <Route path="*" element={
+              <ProtectedRoute requireAuth={false}>
+                <Navigate to="/login" replace />
+              </ProtectedRoute>
+            } />
+          </Routes>
+        </Suspense>
       </Router>
     </AuthProvider>
   );

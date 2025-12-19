@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react';
-import { useAuth } from '@/react-app/App';
+import { useAuth } from '../context/AuthContext'; // Or correct path
 import { 
   Activity, 
   Users, 
   Calendar, 
   Pill, 
   UserCheck, 
-  UserPlus, 
   Stethoscope, 
   Hospital, 
   Clock, 
@@ -121,12 +120,12 @@ export default function Dashboard() {
       }
 
       // Outpatients and Inpatients
-      const { count: outpatientsCount, error: outpatientsError } = await supabase
+      const { count: outpatientsCount } = await supabase
         .from('patients')
         .select('*', { count: 'exact', head: false })
         .eq('patient_type', 'outpatient');
       
-      const { count: inpatientsCount, error: inpatientsError } = await supabase
+      const { count: inpatientsCount } = await supabase
         .from('patients')
         .select('*', { count: 'exact', head: false })
         .eq('patient_type', 'inpatient');
@@ -205,7 +204,7 @@ export default function Dashboard() {
       }
 
       // Get patient's payments
-      const { data: paymentsData, error: paymentsError } = await supabase
+      const { data: paymentsData } = await supabase
         .from('payments')
         .select('amount')
         .eq('patient_id', patientData.id)
@@ -308,7 +307,6 @@ export default function Dashboard() {
   const showMedicineCard = role === 'doctor' || role === 'admin';
   const showInpatientCard = role === 'doctor' || role === 'admin';
   const showOutpatientCard = role === 'doctor' || role === 'admin';
-  const showTotalPatients = role === 'doctor' || role === 'admin';
 
   return (
     <div className="space-y-8 p-4">

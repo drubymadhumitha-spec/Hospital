@@ -1,11 +1,13 @@
 import { ReactNode } from 'react';
 import { X } from 'lucide-react';
 
+// In Modal.tsx, update the interface:
 interface ModalProps {
+  children: ReactNode;
   isOpen: boolean;
   onClose: () => void;
-  title: string;
-  children: ReactNode;
+  title: string | ReactNode; // Allow ReactNode for title
+  className?: string; // Add this
 }
 
 export default function Modal({ isOpen, onClose, title, children }: ModalProps) {

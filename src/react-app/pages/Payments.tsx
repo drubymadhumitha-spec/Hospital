@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, IndianRupee, CheckCircle, TrendingUp, Clock, CreditCard, Calendar, Loader2, Download, Eye, Receipt } from 'lucide-react';
+import { Plus, Trash2, IndianRupee, CheckCircle, TrendingUp, Clock, CreditCard, Calendar, Loader2, Download, Eye } from 'lucide-react';
 import Modal from '@/react-app/components/Modal';
 import Button from '@/react-app/components/Button';
 import Input from '@/react-app/components/Input';
 import Select from '@/react-app/components/Select';
-import { useAuth } from '@/react-app/App';
+import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase'; // Use singleton
 
 // Types
@@ -29,11 +29,25 @@ interface PaymentWithDetails extends Payment {
   appointment_reason?: string;
 }
 
+// Update your Patient interface in types.ts or directly in your component
 interface Patient {
   id: number;
-  name: string;
+  name: string;  // This is your actual column name
   email: string;
-  phone: string;
+  phone?: string;
+  date_of_birth?: string;
+  gender?: string;
+  address?: string;
+  blood_group?: string;
+  medical_history?: string;
+  age?: number;
+  patient_type?: 'inpatient' | 'outpatient';
+  has_diabetes?: boolean;
+  has_hypertension?: boolean;
+  has_sugar_issues?: boolean;
+  family_medical_history?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 interface Appointment {
@@ -46,7 +60,7 @@ interface Appointment {
 
 export default function Payments() {
   const { user, role } = useAuth();
-  
+
   const [payments, setPayments] = useState<PaymentWithDetails[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -55,7 +69,7 @@ export default function Payments() {
   const [submitting, setSubmitting] = useState(false);
   const [currentPatientId, setCurrentPatientId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  
+
   const [formData, setFormData] = useState({
     patient_id: '',
     appointment_id: '',
@@ -75,12 +89,12 @@ export default function Payments() {
             .select('id, name')
             .eq('email', user.email)
             .maybeSingle(); // Use maybeSingle instead of single
-          
+
           if (error) {
             console.error('Patient fetch error:', error);
             return;
           }
-          
+
           if (patientData) {
             setCurrentPatientId(patientData.id);
             setFormData(prev => ({ ...prev, patient_id: patientData.id.toString() }));
@@ -90,7 +104,7 @@ export default function Payments() {
         }
       }
     };
-    
+
     fetchCurrentPatientId();
   }, [role, user?.email]);
 
@@ -99,7 +113,7 @@ export default function Payments() {
     try {
       setLoading(true);
       setError(null);
-      
+
       let query = supabase
         .from('payment_details')
         .select('*');
@@ -135,8 +149,9 @@ export default function Payments() {
   const fetchPatients = async () => {
     try {
       if (role === 'patient') return;
-      
+
       const { data, error } = await supabase
+
         .from('patients')
         .select('id, name, email, phone')
         .order('name');
@@ -145,7 +160,7 @@ export default function Payments() {
         console.error('Patients fetch error:', error);
         return;
       }
-      
+
       setPatients(data || []);
     } catch (error) {
       console.error('Error fetching patients:', error);
@@ -188,12 +203,12 @@ export default function Payments() {
         fetchAppointments()
       ]);
     };
-    
+
     if (role === 'patient' && !currentPatientId) {
       // Wait for patient ID to be fetched
       return;
     }
-    
+
     initData();
   }, [role, currentPatientId]);
 
@@ -201,15 +216,15 @@ export default function Payments() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
-    
+
     try {
       // Patients cannot create payments
       if (role === 'patient') {
         alert('Patients cannot create payment records. Please contact the billing department.');
         return;
       }
-      
-      const { data, error } = await supabase
+
+      const { error } = await supabase
         .from('payments')
         .insert([{
           patient_id: parseInt(formData.patient_id),
@@ -252,7 +267,7 @@ export default function Payments() {
       alert('Patients cannot update payment status.');
       return;
     }
-    
+
     try {
       const { error } = await supabase
         .from('payments')
@@ -274,7 +289,7 @@ export default function Payments() {
       alert('Patients cannot delete payment records.');
       return;
     }
-    
+
     if (!confirm('Are you sure you want to delete this payment record?')) return;
 
     try {
@@ -340,7 +355,7 @@ export default function Payments() {
       Thank you for choosing Medicare Plus!
       =========================================
     `;
-    
+
     const blob = new Blob([receiptContent], { type: 'text/plain' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -391,7 +406,7 @@ export default function Payments() {
 
   // Method icon component
   const getMethodIcon = (method: string) => {
-    const icons: Record<string, JSX.Element> = {
+    const icons: Record<string, React.ReactNode> = {
       'Credit Card': <CreditCard className="w-4 h-4" />,
       'Debit Card': <CreditCard className="w-4 h-4" />,
       'Cash': <IndianRupee className="w-4 h-4" />,
@@ -408,12 +423,12 @@ export default function Payments() {
   const calculateStats = () => {
     // Ensure payments is always an array
     const paymentsToUse = Array.isArray(payments) ? payments : [];
-    
-    const totalRevenue = paymentsToUse.reduce((sum, p) => 
+
+    const totalRevenue = paymentsToUse.reduce((sum, p) =>
       p.payment_status === 'completed' ? sum + p.amount : sum, 0
     );
 
-    const pendingAmount = paymentsToUse.reduce((sum, p) => 
+    const pendingAmount = paymentsToUse.reduce((sum, p) =>
       p.payment_status === 'pending' ? sum + p.amount : sum, 0
     );
 
@@ -488,17 +503,17 @@ export default function Payments() {
             </h1>
             <p className="text-gray-600 mt-2 flex items-center gap-2">
               <IndianRupee className="w-5 h-5 text-green-500" />
-              {role === 'patient' 
-                ? 'View your payment history and receipts' 
+              {role === 'patient'
+                ? 'View your payment history and receipts'
                 : 'Track and manage all patient payments in one place'
               }
             </p>
           </div>
-          
+
           {/* Show add button only for doctors/admins */}
           {(role === 'doctor' || role === 'admin') && (
-            <Button 
-              onClick={() => setIsModalOpen(true)} 
+            <Button
+              onClick={() => setIsModalOpen(true)}
               className="bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-600 hover:to-green-600 text-white shadow-lg transform hover:scale-105 transition-all"
               disabled={submitting}
             >
@@ -609,8 +624,8 @@ export default function Payments() {
               {role === 'patient' ? 'My Payment History' : 'Recent Transactions'}
             </h2>
             <p className="text-blue-100 mt-1">
-              {role === 'patient' 
-                ? 'All your payment records with detailed information' 
+              {role === 'patient'
+                ? 'All your payment records with detailed information'
                 : 'All payment records with detailed information'
               }
             </p>
@@ -714,7 +729,7 @@ export default function Payments() {
                                 </button>
                               </>
                             )}
-                            
+
                             {/* Doctor/Admin actions: status update and delete */}
                             {(role === 'doctor' || role === 'admin') && (
                               <>
@@ -753,13 +768,13 @@ export default function Payments() {
                   No Payments Found
                 </h3>
                 <p className="text-gray-500 mb-6">
-                  {role === 'patient' 
-                    ? "You don't have any payment records yet" 
+                  {role === 'patient'
+                    ? "You don't have any payment records yet"
                     : 'No payment records available'
                   }
                 </p>
                 {(role === 'doctor' || role === 'admin') && (
-                  <Button 
+                  <Button
                     onClick={() => setIsModalOpen(true)}
                     className="bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-600 hover:to-green-600 text-white"
                   >
@@ -774,161 +789,178 @@ export default function Payments() {
       </div>
 
       {/* Add Payment Modal - Only for doctors/admins */}
-      {(role === 'doctor' || role === 'admin') && (
-        <Modal
-          isOpen={isModalOpen}
-          onClose={() => {
+{(role === 'doctor' || role === 'admin') && (
+  <Modal
+    isOpen={isModalOpen}
+    onClose={() => {
+      setIsModalOpen(false);
+      resetForm();
+    }}
+    title={
+      <div className="flex items-center gap-3">
+        <div className="p-2 bg-gradient-to-r from-emerald-500 to-green-500 rounded-lg">
+          <IndianRupee className="w-6 h-6 text-white" />
+        </div>
+        <div>
+          <h2 className="text-2xl font-bold bg-gradient-to-r from-emerald-600 to-green-600 bg-clip-text text-transparent">
+            Add New Payment
+          </h2>
+          <p className="text-gray-600 text-sm">
+            Create a new payment record
+          </p>
+        </div>
+      </div>
+    }
+  >
+    <form onSubmit={handleSubmit} className="space-y-6">
+
+      {/* Patient + Appointment */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Select
+          label="Patient"
+          required
+          value={formData.patient_id}
+          onChange={(e) =>
+            setFormData({ ...formData, patient_id: e.target.value })
+          }
+          options={[
+            { value: '', label: 'Select Patient' },
+            ...(patients?.map(p => ({
+              value: p.id.toString(),
+              label: p.name,
+            })) || []),
+          ]}
+          disabled={submitting}
+        />
+
+        <Select
+          label="Related Appointment (Optional)"
+          value={formData.appointment_id}
+          onChange={(e) =>
+            setFormData({ ...formData, appointment_id: e.target.value })
+          }
+          options={[
+            { value: '', label: 'No specific appointment' },
+            ...(appointments?.map(a => ({
+              value: a.id.toString(),
+              label: `Appointment #${a.id} - ${new Date(
+                a.appointment_date
+              ).toLocaleDateString('en-IN')}`,
+            })) || []),
+          ]}
+          disabled={submitting}
+        />
+      </div>
+
+      {/* Amount */}
+      <div className="relative">
+        <IndianRupee className="absolute left-3 top-3 w-4 h-4 text-gray-500" />
+        <Input
+          type="number"
+          required
+          value={formData.amount}
+          onChange={(e) =>
+            setFormData({ ...formData, amount: e.target.value })
+          }
+          placeholder="Amount"
+          className="pl-10"
+          disabled={submitting}
+        />
+      </div>
+
+      {/* Payment Method */}
+      <Select
+        label="Payment Method"
+        required
+        value={formData.payment_method}
+        onChange={(e) =>
+          setFormData({ ...formData, payment_method: e.target.value })
+        }
+        options={[
+          { value: '', label: 'Select Payment Method' },
+          { value: 'Cash', label: 'Cash' },
+          { value: 'Credit Card', label: 'Credit Card' },
+          { value: 'Debit Card', label: 'Debit Card' },
+          { value: 'Insurance', label: 'Insurance' },
+          { value: 'Bank Transfer', label: 'Bank Transfer' },
+          { value: 'Online Payment', label: 'Online Payment' },
+          { value: 'UPI', label: 'UPI' },
+          { value: 'Cheque', label: 'Cheque' },
+        ]}
+        disabled={submitting}
+      />
+
+      {/* Status + Description */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Select
+          label="Payment Status"
+          required
+          value={formData.payment_status}
+          onChange={(e) =>
+            setFormData({ ...formData, payment_status: e.target.value })
+          }
+          options={[
+            { value: 'pending', label: 'Pending' },
+            { value: 'completed', label: 'Completed' },
+            { value: 'failed', label: 'Failed' },
+            { value: 'refunded', label: 'Refunded' },
+          ]}
+          disabled={submitting}
+        />
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Description
+          </label>
+          <textarea
+            value={formData.description}
+            onChange={(e) =>
+              setFormData({ ...formData, description: e.target.value })
+            }
+            rows={3}
+            className="w-full px-4 py-3 border-2 rounded-xl outline-none"
+            placeholder="Consultation fee, medicine cost, etc."
+            disabled={submitting}
+          />
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div className="flex gap-3 pt-6">
+        <Button type="submit" className="flex-1" disabled={submitting}>
+          {submitting ? (
+            <>
+              <Loader2 className="w-5 h-5 animate-spin mr-2" />
+              Creating...
+            </>
+          ) : (
+            <>
+              <IndianRupee className="w-5 h-5 mr-2" />
+              Create Payment Record
+            </>
+          )}
+        </Button>
+
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => {
             setIsModalOpen(false);
             resetForm();
           }}
-          title={
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-gradient-to-r from-emerald-500 to-green-500 rounded-lg">
-                <IndianRupee className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h2 className="text-2xl font-bold bg-gradient-to-r from-emerald-600 to-green-600 bg-clip-text text-transparent">
-                  Add New Payment
-                </h2>
-                <p className="text-gray-600 text-sm">Create a new payment record</p>
-              </div>
-            </div>
-          }
+          disabled={submitting}
         >
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Select
-                label="Patient"
-                required
-                value={formData.patient_id}
-                onChange={(e) => setFormData({ ...formData, patient_id: e.target.value })}
-                options={[
-                  { value: '', label: 'Select Patient' },
-                  ...(patients?.map(p => ({ value: p.id.toString(), label: p.name })) || []),
-                ]}
-                className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-100"
-                disabled={submitting}
-              />
+          Cancel
+        </Button>
+      </div>
 
-              <Select
-                label="Related Appointment (Optional)"
-                value={formData.appointment_id}
-                onChange={(e) => setFormData({ ...formData, appointment_id: e.target.value })}
-                options={[
-                  { value: '', label: 'No specific appointment' },
-                  ...(appointments?.map(a => ({ 
-                    value: a.id.toString(), 
-                    label: `Appointment #${a.id} - ${new Date(a.appointment_date).toLocaleDateString('en-IN')}` 
-                  })) || []),
-                ]}
-                className="bg-gradient-to-r from-purple-50 to-pink-50 border-purple-100"
-                disabled={submitting}
-              />
-            </div>
+    </form>
+  </Modal>
+)}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Input
-                label="Amount"
-                type="number"
-                step="0.01"
-                required
-                value={formData.amount}
-                onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                placeholder="0.00"
-                className="bg-gradient-to-r from-emerald-50 to-green-50 border-emerald-100"
-                icon={<IndianRupee className="w-5 h-5 text-emerald-500" />}
-                disabled={submitting}
-              />
 
-              <Select
-                label="Payment Method"
-                required
-                value={formData.payment_method}
-                onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}
-                options={[
-                  { value: '', label: 'Select Payment Method' },
-                  { value: 'Cash', label: 'Cash' },
-                  { value: 'Credit Card', label: 'Credit Card' },
-                  { value: 'Debit Card', label: 'Debit Card' },
-                  { value: 'Insurance', label: 'Insurance' },
-                  { value: 'Bank Transfer', label: 'Bank Transfer' },
-                  { value: 'Online Payment', label: 'Online Payment' },
-                  { value: 'UPI', label: 'UPI' },
-                  { value: 'Cheque', label: 'Cheque' },
-                ]}
-                className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-100"
-                disabled={submitting}
-              />
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Select
-                label="Payment Status"
-                required
-                value={formData.payment_status}
-                onChange={(e) => setFormData({ ...formData, payment_status: e.target.value })}
-                options={[
-                  { value: 'pending', label: 'Pending' },
-                  { value: 'completed', label: 'Completed' },
-                  { value: 'failed', label: 'Failed' },
-                  { value: 'refunded', label: 'Refunded' },
-                ]}
-                className="bg-gradient-to-r from-amber-50 to-orange-50 border-amber-100"
-                disabled={submitting}
-              />
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Description
-                </label>
-                <textarea
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  rows={3}
-                  className="w-full px-4 py-3 border-2 border-purple-200 rounded-xl focus:ring-4 focus:ring-purple-200 focus:border-purple-400 transition-all outline-none bg-gradient-to-r from-purple-50 to-pink-50"
-                  placeholder="Consultation fee, medicine cost, procedure fee, etc."
-                  disabled={submitting}
-                />
-              </div>
-            </div>
-
-            <div className="flex gap-3 pt-6">
-              <Button 
-                type="submit" 
-                className="flex-1 bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-600 hover:to-green-600 text-white shadow-lg transform hover:scale-105 transition-all"
-                disabled={submitting}
-              >
-                {submitting ? (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin mr-2" />
-                    Creating...
-                  </>
-                ) : (
-                  <>
-                    <IndianRupee className="w-5 h-5" />
-                    Create Payment Record
-                  </>
-                )}
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => {
-                  setIsModalOpen(false);
-                  resetForm();
-                }}
-                className="bg-gradient-to-r from-gray-100 to-slate-100 hover:from-gray-200 hover:to-slate-200 border border-gray-200"
-                disabled={submitting}
-              >
-                Cancel
-              </Button>
-            </div>
-          </form>
-        </Modal>
-      )}
-
-      {/* Add CSS for blob animation */}
-      <style jsx>{`
+{/* Add CSS for blob animation */ }
+<style>{`
         @keyframes blob {
           0% {
             transform: translate(0px, 0px) scale(1);
@@ -953,6 +985,6 @@ export default function Payments() {
           animation-delay: 4s;
         }
       `}</style>
-    </div>
+    </div >
   );
 }
